@@ -67,4 +67,81 @@ Now the question is why there is still an element 0 which is an empty slice on t
 2 + m + n elements on the stack , but due to the design bug, it nees to take 3 + m +n elments, we need to push another empty element to overcome the defect. For most of bitcoin full nodes, when they are executing
 the command OP_MULTICHECKSIG, if there is not OP_0 on the evaluate stack, they will just deem the script is fail.
 
+The number of public key and signature may not constrain to 2 and 1, it is possible that there are m public keys and n signature, we need to check the value of top element to decide the number of public keys and
+after reading the given number of public keys, we need to read the top element again to decide the number of signature, let's see how we can implement the OP_CHECKMULTISIG command, in op.go we have following code:
+
+```g
+func (b *BitcoinOpCode) opCheckMultiSig(zBin []byte) bool {
+	if len(b.stack) < 1 {
+		return false
+	}
+	//read the top element to get the number of public keys
+	pubKeyCounts := int(b.DecodeNum(b.popStack()))
+	if len(b.stack) < pubKeyCounts+1 {
+		return false
+	}
+
+	secPubKeys := make([][]byte, 0)
+	for i := 0; i < pubKeyCounts; i++ {
+		secPubKeys = append(secPubKeys, b.popStack())
+	}
+
+	//get the number of signatures
+	sigCounts := int(b.DecodeNum(b.popStack()))
+	if len(b.stack) < sigCounts+1 {
+		return false
+	}
+
+	derSignatures := make([][]byte, 0)
+	for i := 0; i < sigCounts; i++ {
+		signature := b.popStack()
+		//remove last byte, it is hash type
+		signature = signature[0 : len(signature)-1]
+		derSignatures = append(derSignatures, signature)
+	}
+
+	points := make([]*ecc.Point, 0)
+	sigs := make([]*ecc.Signature, 0)
+	for i := 0; i < pubKeyCounts; i++ {
+		points = append(points, ecc.ParseSEC(secPubKeys[i]))
+	}
+	for i := 0; i < sigCounts; i++ {
+		sigs = append(sigs, ecc.ParseSigBin(derSignatures[i]))
+	}
+	/*
+		for m public keys and n signatures, we need to make sure, there are
+		n public keys from the total of m that can verify the n siganture
+	*/
+	z := new(big.Int)
+	z.SetBytes(zBin)
+	n := ecc.GetBitcoinValueN()
+	zField := ecc.NewFieldElement(n, z)
+
+	for _, sig := range sigs {
+		if len(points) == 0 {
+			return false
+		}
+		for len(points) > 0 {
+			point := points[0]
+			points = points[1:]
+			if point.Verify(zField, sig) {
+				break
+			}
+		}
+	}
+	b.stack = append(b.stack, b.EncodeNum(1))
+	return true
+}
+```
+
+As you can see the procedure above is quit ugly but it works. But the method above has several problems:
+
+1, it nees many public keys and that will make the ScriptPubKey very long, which add to the cost of communication bandwidth.
+
+2, It will takes out huge disk volumn and RAM for bitcoin full nodes.
+
+3, It can be turned into attack method to harm the bitcoin blockchain.
+
+In order to avoid the shortcomings, bitcoin community design the pay-to-script-hash(p2sh) script.
+
 
