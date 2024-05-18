@@ -1,1 +1,0 @@
-# golang-bitcoin-p2sh-contract
