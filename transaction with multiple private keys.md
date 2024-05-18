@@ -142,6 +142,35 @@ As you can see the procedure above is quit ugly but it works. But the method abo
 
 3, It can be turned into attack method to harm the bitcoin blockchain.
 
-In order to avoid the shortcomings, bitcoin community design the pay-to-script-hash(p2sh) script.
+In order to avoid the shortcomings, bitcoin community design the pay-to-script-hash(p2sh) script. When something is too long to handle, what kind of solution we can take? one method
+that often used to handle such situation is hash, we can hash a very long string into a fixed length hash string .P2sh transaction is doing something
+like this, for example look at the following multisig transaction:
+```g
+5221022626e955ea6ea6d98850c994f9107b036b1334f18ca8830bfff1295d21
+cfdb702103b287eaf122eea69030a0e9feed096bed8045c8b98bec453e1ffac7fbdbd4bb7152ae
+```
+it is a ScriptPubKey with two publick keys , its structure is the same as the example above, the ScriptPubKey that contains multiple public key, has another name called redeemscript,
+we do a Hash160 on the content above and get the following result:
+```g
+74d691da1574e6b3c192ecfb52cc8984ee7b6c56
+```
+Then we construct a script by using the data above, its raw data is as following:
+```
+a91474d691da1574e6b3c192ecfb52cc8984ee7b6c5687
+```
+The first byte a9 is command OP_HASH160
+
+The second byte 0x14 is the length of the following hash data chunk
+
+The following data chunk is the hash160 result of the above ScriptPubKey,
+
+The last byte 0x87 is op code OP_EQUAL
+
+Now, the original scriptPubKey will not contains in the output of previous transaction any more, the creator of p2sh transaction is responsible for saving the orignal ScriptPubKey 
+which is the redeemscript, now the scriptpubkey and scriptsig looks like following:
+
+![bitcoin_script (3)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/9d9febb4-7a72-4681-9f25-771b8128327e)
+
+
 
 
