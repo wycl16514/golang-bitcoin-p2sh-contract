@@ -229,95 +229,13 @@ This time when the script run the command OP_CHECKMULTISIG, it will take all ele
 
 ![bitcoin_script (4)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/79c5a025-cced-4e48-8b0d-1e8709f9a87f)
 
-This means the script verification is success. Let's see how to implement the evaluate process for p2sh transaction, it is a little be tricky, the script only begin the parsing of p2sh when the top 4 elements of 
-the parsing stack satisfing a pattern which is the first element is a data chunk, the second element is a command of OP_HASH160 which is value of 0xa9, and the third element is a data chunk with length 20 bytes,
-and the last element is command OP_EQUAL which is value of 0x87, therefore the handling code is as following in op.go:
+This means the script verification is success. Let's see how to implement the evaluate process for p2sh transaction, it is a little be tricky, we need to check the scriptPubKey of to decide whether the current
+transaction is kind of p2sh, if the scriptPubKey contains only three elements, the first one is OP_HASH160, the second is a chunk of data, the third one is OP_EQUAL, then the current transaction should be p2sh,
+let's code this checking logic as following:
 ```g
-const (
-	/*
-		this is not a bitcoin script command, it is defined by ourself,
-		if we encounter the p2sh pattern on the script stack, that is the
-		fisrt element is data chunk, the second element is OP_HASH160,
-		the third element is a chunk of data, the fourth element is
-		OP_EQUAL, then we will use this command to do p2sh parsing
-	*/
-	OP_P2SH = 254
-)
 
-func (b *BitcoinOpCode) isP2sh() bool {
-	/*
-		if we encounter the p2sh pattern on the script stack, that is the
-		fisrt element is data chunk, the second element is OP_HASH160,
-		the third element is a chunk of data, the fourth element is
-		OP_EQUAL
-	*/
-	if len(b.cmds[0]) != 1 || b.cmds[0][0] != OP_HASH160 {
-		//the first element should be OP_HASH160
-		return false
-	}
-
-	if len(b.cmds[1]) == 1 {
-		//the second element should be hash data chunk
-		return false
-	}
-
-	if len(b.cmds[0]) != 1 || b.cmds[0][0] != OP_EQUAL {
-		//the third element should be OP_EQUAL
-		return false
-	}
-
-	return true
-}
-
-func (b *BitcoinOpCode) opP2sh() bool {
-	//the first command is OP_HASH160
-	b.RemoveCmd()
-	//the second element is a data chunk of hash
-	h160 := b.RemoveCmd()
-	//the third element is OP_EQUAL
-	b.RemoveCmd()
-
-	/*
-		the top element on stack is content of redeemscript, cache it and
-		do hash160 on it
-	*/
-	redeemScriptBinary := b.stack[len(b.stack)-1]
-	if b.opHash160() != true {
-		return false
-	}
-	//append the hash160 above onto the stack
-	b.stack = append(b.stack, h160)
-	//compare the two 160 hash on the stack
-	if b.opEqual() != true {
-		return false
-	}
-
-	if b.opVerify() != true {
-		//if the two hash are equal, value 1 will push on the stack
-		return false
-	}
-
-	//parse the redeemscript and append its command for handling
-	scriptReader := bytes.NewReader(redeemScriptBinary)
-	redeemScriptSig := NewScriptSig(bufio.NewReader(scriptReader))
-	b.cmds = append(b.cmds, redeemScriptSig.cmds...)
-	return true
-}
-
-func (b *BitcoinOpCode) ExecuteOperation(cmd int, z []byte) bool {
-    switch cmd {
-    ....
-    	case OP_P2SH:
-		return b.opP2sh()
-	case OP_CHECKMULTISIG:
-		return b.opCheckMultiSig(z)
-    ....
-    }
-}
 ```
-In opP2sh, it checks the top 3 elements of command stack satisfy the pattern for p2sh, if the first 3 elements are OP_HASH160, a chunk of hash data and OP_EQUAL, then it is p2sh transaction, then it executes the
-OP_HASH160 command, notice the code cache the binary content of redeemscript, if the two hashes are the same, it will parse the redeemscript binary data into scriptsig and append its command to current command 
-stack for execution.
+
 
 In the end of this section, let's see how to create wallet address for p2sh, when we create address for p2pkh transaction, we do hash160 on public key SEC format, then append prefix with 0x00 for mainnet or 0x6f 
 for testnet, and then do base58 checksum encode, for p2sh address, the only difference is append 0x05 for mainnet and 0xc4 for testnet, the code is as following at point.go:
