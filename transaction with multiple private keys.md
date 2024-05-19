@@ -229,4 +229,9 @@ This time when the script run the command OP_CHECKMULTISIG, it will take all ele
 
 ![bitcoin_script (4)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/79c5a025-cced-4e48-8b0d-1e8709f9a87f)
 
-This means the script verification is success.
+This means the script verification is success. Let's see how to implement the evaluate process for p2sh transaction, it is a little be tricky, the script only begin the parsing of p2sh when the top 4 elements of 
+the parsing stack satisfing a pattern which is the first element is a data chunk, the second element is a command of OP_HASH160 which is value of 0xa9, and the third element is a data chunk with length 20 bytes,
+and the last element is command OP_EQUAL which is value of 0x87, therefore the handling code is as following:
+```g
+
+```
