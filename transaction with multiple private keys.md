@@ -172,5 +172,61 @@ which is the redeemscript, now the scriptpubkey and scriptsig looks like followi
 ![bitcoin_script (3)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/9d9febb4-7a72-4681-9f25-771b8128327e)
 
 
+Let's go through the execution process of aboved combined script, The first element is OP_0 then the script push an empty array onto the parsing stack and the following 3 elements are data elements and they will
+push to the parsing stack directly:
+
+![bitcoin_script (4)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/d88af736-8b25-4cc6-890c-06cf66f4d457)
+
+Now the top element of script is OP_HASH160, then the script will get the top element from the parsing script and do Hash160 computation on it and push the hash result to the top of parsing stack:
 
 
+![bitcoin_script (5)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/1db3202a-243d-4993-9369-cc42eacd99b0)
+
+Now the top element of the script is a chunk of hash data, then the data will push to the top of parsing stack directly:
+
+![bitcoin_script](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/296302a5-fee1-4c82-8ad3-1f807679ea07)
+
+Now the top element on the script is OP_EQUAL, this command will take the top 2 elements of the parsing stack, and check if they are equal, if they are, the script will push a value 1 on the parsing stack:
+
+![bitcoin_script (1)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/9b44f736-a90c-4366-b4f9-c6b99572b86a)
+
+If the bitcoin node is design before the release of protocol BIP0016, they will aggree to release the fund in the transaction, of couse now, most of bitcoin node are designed after protocol BIP0016, when they take
+the first element from the parsing stack and found it is 1, then they will take out the redeemscript again and execute it, let's take a look on the script again:
+
+```g
+52 21
+
+022626e955ea6ea6d98850c994f9107b036b1334f18ca8830bfff1295d21cfdb70
+
+21
+
+03b287eaf122eea69030a0e9feed096bed8045c8b98bec453e1ffac7fbdbd4bb71
+
+52
+
+ae
+```
+1, The first byte is 0x52, it is value for op code OP_2
+2, The second byte is 0x21, is the length for the following data chunk which is the first public key
+3, following the end of first public key is byte 0x21 again, which is length for the second public key
+4, following the end of second public key is byte 0x52, is value for op code OP_2
+5, the last byte is 0xa3, it is op code OP_CHECKMULTISIG
+
+Now the stack for the script and the parsing stack is as following:
+![bitcoin_script](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/0fcb4ec5-57e0-4f93-9674-a0caafc3d857)
+
+
+Then the script execute the top command OP_2, this will result in pusing a value 2 on the stack:
+
+![bitcoin_script (1)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/99f9f8ac-7426-4180-b755-f3bf58eb6f44)
+
+
+Because the first 3 elments on the script are two data elements, and one op code OP_2, executing then will have the following result:
+
+![bitcoin_script (2)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/762a0d9e-7537-499d-86c7-dee0da86a650)
+
+This time when the script run the command OP_CHECKMULTISIG, it will take all elements on the parsing stack(m+n+3), if the execution result is success, it will push value 1 on the stack:
+
+![bitcoin_script (4)](https://github.com/wycl16514/golang-bitcoin-p2sh-contract/assets/7506958/79c5a025-cced-4e48-8b0d-1e8709f9a87f)
+
+This means the script verification is success.
