@@ -1,3 +1,22 @@
+At the beginning of this section, we need to do some bug fixing. The first bug is when we use reader from bufio to read data into given buffer, we need to change it to:
+
+io.ReadFull(reader, buffer)
+
+The problem here is, we want the reader to fill data at the full of given buffer, but for the read method of reader from bufio, it may not fill the buffer to full at 
+some cases, and we need to use io.ReadFull to make sure each time we fill the buffer at full.
+
+The second fix is as following:
+```g
+func (s *ScriptSig) Evaluate(z []byte) bool {
+    ...
+    //bug fix, need to check the top of the stack
+	if len(s.bitcoinOpCode.stack[len(s.bitcoinOpCode.stack)-1]) == 0 {
+		return false
+	}
+    return true
+}
+```
+
 For some situation, we may need multiple parties to control the release of fund. For example, if the fund need to proved by several board members, each one has his/her own private key, the fund can only be released
 if all board members sign to the contract.
 
@@ -233,6 +252,18 @@ This means the script verification is success. Let's see how to implement the ev
 transaction is kind of p2sh, if the scriptPubKey contains only three elements, the first one is OP_HASH160, the second is a chunk of data, the third one is OP_EQUAL, then the current transaction should be p2sh,
 let's code this checking logic as following:
 ```g
+func (b *BitcoinOpCode) opNum(op byte) bool {
+	/*
+		handle OP_0 to OP_16
+	*/
+	opNum := byte(0)
+	if op >= OP_1 && op <= OP_16 {
+		opNum = (op - OP_1) + 1
+	}
+	b.stack = append(b.stack, b.EncodeNum(int64(opNum)))
+	return true
+}
+
 func (t *TransactinInput) isP2sh(script *ScriptSig) bool {
 	isP2sh := true
 	if len(script.bitcoinOpCode.cmds[0]) != 1 || script.bitcoinOpCode.cmds[0][0] != OP_HASH160 {
@@ -351,6 +382,67 @@ func (b *BitcoinOpCode) ExecuteOperation(cmd int, z []byte) bool {
 		return b.opP2sh()
         ...
         }
+}
+
+func (b *BitcoinOpCode) ExecuteOperation(cmd int, z []byte) bool {
+	/*
+		if the operation executed successfuly return true, otherwise return false
+	*/
+	switch cmd {
+	case OP_CHECKSIG:
+		return b.opCheckSig(z)
+	case OP_DUP:
+		return b.opDup()
+	case OP_HASH160:
+		return b.opHash160()
+	case OP_EQUALVERIFY:
+		return b.opEqualVerify()
+	case OP_CHECKMULTISIG:
+		return b.opCheckMultiSig(z)
+	case OP_P2SH:
+		return b.opP2sh()
+	case OP_0:
+		fallthrough
+	case OP_1:
+		fallthrough
+	case OP_2:
+		fallthrough
+	case OP_3:
+		fallthrough
+	case OP_4:
+		fallthrough
+	case OP_5:
+		fallthrough
+	case OP_6:
+		fallthrough
+	case OP_7:
+		fallthrough
+	case OP_8:
+		fallthrough
+	case OP_9:
+		fallthrough
+	case OP_10:
+		fallthrough
+	case OP_11:
+		fallthrough
+	case OP_12:
+		fallthrough
+	case OP_13:
+		fallthrough
+	case OP_14:
+		fallthrough
+	case OP_15:
+		fallthrough
+	case OP_16:
+		return b.opNum(byte(cmd))
+	case OP_EQUAL:
+		return b.opEqual()
+	default:
+		errStr := fmt.Sprintf("operation %s not implemented\n", b.opCodeNames[cmd])
+		panic(errStr)
+	}
+
+	return false
 }
 ```
 
