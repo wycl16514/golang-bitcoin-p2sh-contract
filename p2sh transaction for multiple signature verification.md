@@ -233,8 +233,132 @@ This means the script verification is success. Let's see how to implement the ev
 transaction is kind of p2sh, if the scriptPubKey contains only three elements, the first one is OP_HASH160, the second is a chunk of data, the third one is OP_EQUAL, then the current transaction should be p2sh,
 let's code this checking logic as following:
 ```g
+func (t *TransactinInput) isP2sh(script *ScriptSig) bool {
+	isP2sh := true
+	if len(script.bitcoinOpCode.cmds[0]) != 1 || script.bitcoinOpCode.cmds[0][0] != OP_HASH160 {
+		//the first element should be OP_HASH160
+		isP2sh = false
+	}
 
+	if len(script.bitcoinOpCode.cmds[1]) == 1 {
+		//the second element should be hash data chunk
+		isP2sh = false
+	}
+
+	if len(script.bitcoinOpCode.cmds[2]) != 1 || script.bitcoinOpCode.cmds[2][0] != OP_EQUAL {
+		//the third element should be OP_EQUAL
+		isP2sh = false
+	}
+
+	return isP2sh
+}
 ```
+In aboved code, we get the ScriptPubKey of from the given output of previous transaction, and check its patter, if the script contains only three elements, the first element is OP_HASH160, the second one is 
+a data chunk, the third one is OP_EQUAL, then the current transaction is p2sh kind. As we metionded above, if the transaction is p2sh, and when execute the OP_EQUAL operation and its result is 1, then we need
+to parse the redeemscript and execute it is command, therefore we need to check this situation in the process of evaluation, and we handle it in the  BitcoinOpCode as following:
+```g
+const (
+	/*
+	   this is not a bitcoin script command, it is defined by ourself,
+	   if we encounter the p2sh pattern on the script stack, that is the
+	   fisrt element is data chunk, the second element is OP_HASH160,
+	   the third element is a chunk of data, the fourth element is
+	   OP_EQUAL, then we will use this command to do p2sh parsing
+	*/
+	OP_P2SH = 254
+)
+
+func (b *BitcoinOpCode) isP2sh() bool {
+	/*
+	   if we encounter the p2sh pattern on the script stack, that is the
+	   fisrt element is data chunk, the second element is OP_HASH160,
+	   the third element is a chunk of data, the fourth element is
+	   OP_EQUAL
+	*/
+	if len(b.cmds[0]) != 1 || b.cmds[0][0] != OP_HASH160 {
+		//the first element should be OP_HASH160
+		return false
+	}
+
+	if len(b.cmds[1]) == 1 {
+		//the second element should be hash data chunk
+		return false
+	}
+
+	if len(b.cmds[0]) != 1 || b.cmds[0][0] != OP_EQUAL {
+		//the third element should be OP_EQUAL
+		return false
+	}
+
+	return true
+}
+
+func (b *BitcoinOpCode) opP2sh() bool {
+	//the first command is OP_HASH160
+	b.RemoveCmd()
+	//the second element is a data chunk of hash
+	h160 := b.RemoveCmd()
+	//the third element is OP_EQUAL
+	b.RemoveCmd()
+
+	/*
+	   the top element on stack is content of redeemscript, cache it and
+	   do hash160 on it
+	*/
+	redeemScriptBinary := b.stack[len(b.stack)-1]
+	if b.opHash160() != true {
+		return false
+	}
+	//append the hash160 above onto the stack
+	b.stack = append(b.stack, h160)
+	//compare the two 160 hash on the stack
+	if b.opEqual() != true {
+		return false
+	}
+
+	if b.opVerify() != true {
+		//if the two hash are equal, value 1 will push on the stack
+		return false
+	}
+
+	//parse the redeemscript and append its command for handling
+	scriptReader := bytes.NewReader(redeemScriptBinary)
+	redeemScriptSig := NewScriptSig(bufio.NewReader(scriptReader))
+	b.cmds = append(b.cmds, redeemScriptSig.cmds...)
+	return true
+}
+
+func (b *BitcoinOpCode) AppendDataElement(element []byte) {
+	b.stack = append(b.stack, element)
+	/*
+		we need to check the transaction is p2sh or not, if its p2sh,
+		then the data element here is the binary data of reddemscript,
+		and we insert OP_P2SH command to trigger the handling of the three
+		p2sh command
+	*/
+	if b.isP2sh() {
+		b.cmds = append([][]byte{[]byte{OP_P2SH}}, b.cmds...)
+	}
+}
+
+func (b *BitcoinOpCode) ExecuteOperation(cmd int, z []byte) bool {
+	/*
+		if the operation executed successfuly return true, otherwise return false
+	*/
+	switch cmd {
+        ...
+        case OP_P2SH:
+		return b.opP2sh()
+        ...
+        }
+}
+```
+
+In the above code, we defined a new op command OP_P2SH, this is not a official bitcoin script command, it is defined by ourself, every time we push a data element, we check the current op commands on the command
+stack meet the pattern of p2sh scriptpubkey or not, if they are, then we insert the OP_P2SH command to the head of command stack, then in next time the command will be executed and the opP2sh method is called,
+In this method, the top 3 elements on the parsing stack is OP_HASH160, data chunk of hash and OP_EQUAL, It removes the top 3 commands, then the top command on the top of parsing statck is the binary data of 
+redeemscript, then it compute hash160 on the redeemscript, check its result is the same as the hash data chunk, if two hashes are the same, it parses the redeemscript and add commands of redeemscript for execution.
+
 
 
 In the end of this section, let's see how to create wallet address for p2sh, when we create address for p2pkh transaction, we do hash160 on public key SEC format, then append prefix with 0x00 for mainnet or 0x6f 
