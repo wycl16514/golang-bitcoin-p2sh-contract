@@ -264,66 +264,6 @@ func (b *BitcoinOpCode) opNum(op byte) bool {
 	return true
 }
 
-func (t *TransactinInput) isP2sh(script *ScriptSig) bool {
-	isP2sh := true
-	if len(script.bitcoinOpCode.cmds[0]) != 1 || script.bitcoinOpCode.cmds[0][0] != OP_HASH160 {
-		//the first element should be OP_HASH160
-		isP2sh = false
-	}
-
-	if len(script.bitcoinOpCode.cmds[1]) == 1 {
-		//the second element should be hash data chunk
-		isP2sh = false
-	}
-
-	if len(script.bitcoinOpCode.cmds[2]) != 1 || script.bitcoinOpCode.cmds[2][0] != OP_EQUAL {
-		//the third element should be OP_EQUAL
-		isP2sh = false
-	}
-
-	return isP2sh
-}
-```
-In aboved code, we get the ScriptPubKey of from the given output of previous transaction, and check its patter, if the script contains only three elements, the first element is OP_HASH160, the second one is 
-a data chunk, the third one is OP_EQUAL, then the current transaction is p2sh kind. As we metionded above, if the transaction is p2sh, and when execute the OP_EQUAL operation and its result is 1, then we need
-to parse the redeemscript and execute it is command, therefore we need to check this situation in the process of evaluation, and we handle it in the  BitcoinOpCode as following:
-```g
-const (
-	/*
-	   this is not a bitcoin script command, it is defined by ourself,
-	   if we encounter the p2sh pattern on the script stack, that is the
-	   fisrt element is data chunk, the second element is OP_HASH160,
-	   the third element is a chunk of data, the fourth element is
-	   OP_EQUAL, then we will use this command to do p2sh parsing
-	*/
-	OP_P2SH = 254
-)
-
-func (b *BitcoinOpCode) isP2sh() bool {
-	/*
-	   if we encounter the p2sh pattern on the script stack, that is the
-	   fisrt element is data chunk, the second element is OP_HASH160,
-	   the third element is a chunk of data, the fourth element is
-	   OP_EQUAL
-	*/
-	if len(b.cmds[0]) != 1 || b.cmds[0][0] != OP_HASH160 {
-		//the first element should be OP_HASH160
-		return false
-	}
-
-	if len(b.cmds[1]) == 1 {
-		//the second element should be hash data chunk
-		return false
-	}
-
-	if len(b.cmds[0]) != 1 || b.cmds[0][0] != OP_EQUAL {
-		//the third element should be OP_EQUAL
-		return false
-	}
-
-	return true
-}
-
 func (b *BitcoinOpCode) opP2sh() bool {
 	//the first command is OP_HASH160
 	b.RemoveCmd()
@@ -358,6 +298,17 @@ func (b *BitcoinOpCode) opP2sh() bool {
 	b.cmds = append(b.cmds, redeemScriptSig.cmds...)
 	return true
 }
+
+const (
+	/*
+	   this is not a bitcoin script command, it is defined by ourself,
+	   if we encounter the p2sh pattern on the script stack, that is the
+	   fisrt element is data chunk, the second element is OP_HASH160,
+	   the third element is a chunk of data, the fourth element is
+	   OP_EQUAL, then we will use this command to do p2sh parsing
+	*/
+	OP_P2SH = 254
+)
 
 func (b *BitcoinOpCode) AppendDataElement(element []byte) {
 	b.stack = append(b.stack, element)
